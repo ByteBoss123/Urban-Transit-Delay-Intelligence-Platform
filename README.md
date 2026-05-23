@@ -133,20 +133,6 @@ python -m http.server 3000 --directory dashboard/
 
 ---
 
-## JD Coverage Map
-
-| Requirement | Implementation |
-|---|---|
-| BS/MS technical field | ✅ George Mason DAEN |
-| Complex data modeling at scale | ✅ Delta Lake + dbt 3-layer models |
-| Advanced SQL + warehousing | ✅ dbt marts with window functions, SCD patterns |
-| Airflow workflow manager | ✅ 3 production DAGs with SLAs + alerting |
-| Kafka (streaming platform) | ✅ GTFS-RT producer with 3 topics |
-| Spark (processing framework) | ✅ Structured Streaming, MLlib, foreachBatch |
-| HDFS / HBase (storage) | ✅ HBase feature store + Delta Lake |
-| Python skills | ✅ Producer, Spark jobs, Airflow tasks |
-| DataOps mindset | ✅ DQ DAG, dbt tests, incremental models |
-| Next-gen warehousing | ✅ Delta Lake with ZORDER, time-travel, OPTIMIZE |
 
 ---
 
