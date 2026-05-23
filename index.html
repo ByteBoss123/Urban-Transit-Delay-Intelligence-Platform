@@ -1,0 +1,646 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Transit Delay Intelligence Platform</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  :root {
+    --bg:       #0a0d14;
+    --surface:  #111620;
+    --surface2: #181e2e;
+    --border:   rgba(255,255,255,0.07);
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --accent:   #3b82f6;
+    --green:    #22c55e;
+    --yellow:   #eab308;
+    --red:      #ef4444;
+    --orange:   #f97316;
+    --purple:   #a855f7;
+    --font:     'Space Grotesk', sans-serif;
+    --mono:     'JetBrains Mono', monospace;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font);
+    font-size: 14px;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* ── Header ── */
+  .header {
+    padding: 18px 24px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: var(--surface);
+  }
+  .header-left { display: flex; align-items: center; gap: 12px; }
+  .logo-dot {
+    width: 10px; height: 10px; border-radius: 50%;
+    background: var(--accent);
+    box-shadow: 0 0 8px var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+  .header h1 { font-size: 16px; font-weight: 600; letter-spacing: -0.3px; }
+  .header .sub { font-size: 12px; color: var(--muted); margin-top: 2px; }
+  .live-badge {
+    background: rgba(34,197,94,0.12);
+    color: var(--green);
+    border: 1px solid rgba(34,197,94,0.2);
+    border-radius: 20px;
+    padding: 4px 10px;
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--mono);
+    letter-spacing: 0.5px;
+    display: flex; align-items: center; gap: 5px;
+  }
+  .live-badge::before {
+    content:''; width:6px; height:6px; border-radius:50%;
+    background: var(--green);
+    animation: pulse 1.5s ease-in-out infinite;
+  }
+
+  /* ── Layout ── */
+  .main { padding: 20px 24px; display: flex; flex-direction: column; gap: 16px; }
+
+  /* ── KPI Cards ── */
+  .kpis { display: grid; grid-template-columns: repeat(5, 1fr); gap: 12px; }
+  .kpi-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 14px 16px;
+    position: relative;
+    overflow: hidden;
+  }
+  .kpi-card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: var(--accent-color, var(--accent));
+  }
+  .kpi-label { font-size: 11px; color: var(--muted); font-weight: 500; letter-spacing: 0.3px; text-transform: uppercase; }
+  .kpi-value { font-size: 28px; font-weight: 700; margin: 6px 0 2px; font-family: var(--mono); }
+  .kpi-delta { font-size: 11px; color: var(--muted); }
+  .kpi-delta.up   { color: var(--red);   }
+  .kpi-delta.down { color: var(--green); }
+
+  /* ── Grid layout ── */
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  .grid-3 { display: grid; grid-template-columns: 2fr 1fr; gap: 16px; }
+
+  /* ── Panel ── */
+  .panel {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px 18px;
+  }
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 14px;
+  }
+  .panel-title { font-size: 13px; font-weight: 600; }
+  .panel-sub   { font-size: 11px; color: var(--muted); margin-top: 2px; }
+
+  /* ── Route table ── */
+  .route-table { width: 100%; border-collapse: collapse; }
+  .route-table th {
+    text-align: left; font-size: 10px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: 0.5px;
+    padding: 0 8px 10px; border-bottom: 1px solid var(--border);
+  }
+  .route-table td {
+    padding: 10px 8px; border-bottom: 1px solid rgba(255,255,255,0.03);
+    font-size: 13px;
+  }
+  .route-table tr:last-child td { border-bottom: none; }
+  .route-table tr:hover td { background: rgba(255,255,255,0.02); }
+
+  .route-badge {
+    display: inline-block;
+    width: 28px; height: 20px; border-radius: 4px;
+    font-size: 10px; font-weight: 700; font-family: var(--mono);
+    text-align: center; line-height: 20px;
+    color: #fff;
+  }
+
+  .severity-pill {
+    display: inline-flex; align-items: center; gap: 4px;
+    padding: 3px 8px; border-radius: 20px;
+    font-size: 11px; font-weight: 600; font-family: var(--mono);
+  }
+  .sev-severe   { background: rgba(239,68,68,0.15);  color: var(--red);    border: 1px solid rgba(239,68,68,0.25); }
+  .sev-moderate { background: rgba(234,179,8,0.12);  color: var(--yellow); border: 1px solid rgba(234,179,8,0.2); }
+  .sev-minor    { background: rgba(249,115,22,0.12); color: var(--orange); border: 1px solid rgba(249,115,22,0.2); }
+  .sev-ontime   { background: rgba(34,197,94,0.1);   color: var(--green);  border: 1px solid rgba(34,197,94,0.2); }
+
+  /* ── Cascade alert ── */
+  .cascade-list { display: flex; flex-direction: column; gap: 8px; }
+  .cascade-item {
+    background: rgba(239,68,68,0.06);
+    border: 1px solid rgba(239,68,68,0.15);
+    border-left: 3px solid var(--red);
+    border-radius: 6px;
+    padding: 10px 12px;
+  }
+  .cascade-item.moderate {
+    background: rgba(234,179,8,0.06);
+    border-color: rgba(234,179,8,0.2);
+    border-left-color: var(--yellow);
+  }
+  .cascade-route  { font-size: 12px; font-weight: 700; font-family: var(--mono); }
+  .cascade-detail { font-size: 11px; color: var(--muted); margin-top: 2px; }
+  .cascade-score-bar {
+    height: 3px; border-radius: 2px;
+    background: rgba(255,255,255,0.06);
+    margin-top: 8px; overflow: hidden;
+  }
+  .cascade-score-fill { height: 100%; border-radius: 2px; }
+
+  /* ── Score gauge ── */
+  .reliability-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 8px; margin-top: 4px; }
+  .rel-item {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px;
+    text-align: center;
+  }
+  .rel-route { font-size: 11px; font-weight: 700; font-family: var(--mono); color: var(--muted); margin-bottom: 4px; }
+  .rel-score { font-size: 22px; font-weight: 700; font-family: var(--mono); }
+  .rel-bar   { height: 3px; border-radius: 2px; background: rgba(255,255,255,0.06); margin-top: 6px; }
+  .rel-fill  { height: 100%; border-radius: 2px; }
+
+  /* ── Timeline ── */
+  .chart-wrap { position: relative; height: 180px; }
+
+  /* ── Controls ── */
+  .controls { display: flex; gap: 8px; align-items: center; }
+  .ctrl-btn {
+    background: var(--surface2);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: 6px;
+    padding: 5px 12px;
+    font-size: 11px;
+    font-family: var(--font);
+    cursor: pointer;
+    transition: all .15s;
+  }
+  .ctrl-btn:hover { border-color: var(--accent); color: var(--accent); }
+  .ctrl-btn.active { background: rgba(59,130,246,0.15); border-color: var(--accent); color: var(--accent); }
+
+  .timestamp { font-family: var(--mono); font-size: 11px; color: var(--muted); }
+
+  /* ── Spark lines ── */
+  .sparkline { display: flex; align-items: flex-end; gap: 2px; height: 28px; }
+  .spark-bar {
+    flex: 1; border-radius: 2px;
+    transition: height .3s ease, background .3s;
+    min-height: 3px;
+  }
+
+  /* ── Footer ── */
+  .footer {
+    border-top: 1px solid var(--border);
+    padding: 12px 24px;
+    display: flex; align-items: center; justify-content: space-between;
+    color: var(--muted); font-size: 11px;
+  }
+  .footer span { font-family: var(--mono); }
+
+  .refresh-indicator { display: flex; align-items: center; gap: 6px; }
+  .refresh-ring {
+    width: 14px; height: 14px; border-radius: 50%;
+    border: 1.5px solid rgba(59,130,246,0.2);
+    border-top-color: var(--accent);
+    animation: spin 1.5s linear infinite;
+    opacity: 0;
+    transition: opacity .2s;
+  }
+  .refresh-ring.active { opacity: 1; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+</style>
+</head>
+<body>
+
+<div class="header">
+  <div class="header-left">
+    <div class="logo-dot"></div>
+    <div>
+      <h1>Transit Delay Intelligence Platform</h1>
+      <div class="sub">GTFS-RT · Kafka · Spark Streaming · Delta Lake · dbt</div>
+    </div>
+  </div>
+  <div style="display:flex;align-items:center;gap:12px">
+    <span class="timestamp" id="clock"></span>
+    <span class="live-badge">LIVE</span>
+  </div>
+</div>
+
+<div class="main">
+
+  <!-- KPIs -->
+  <div class="kpis">
+    <div class="kpi-card" style="--accent-color:#3b82f6">
+      <div class="kpi-label">Active Vehicles</div>
+      <div class="kpi-value" id="kpi-vehicles">—</div>
+      <div class="kpi-delta" id="kpi-vehicles-d">loading...</div>
+    </div>
+    <div class="kpi-card" style="--accent-color:#22c55e">
+      <div class="kpi-label">On-Time Rate</div>
+      <div class="kpi-value" id="kpi-ontime">—</div>
+      <div class="kpi-delta" id="kpi-ontime-d">last 15 min</div>
+    </div>
+    <div class="kpi-card" style="--accent-color:#eab308">
+      <div class="kpi-label">Avg Delay</div>
+      <div class="kpi-value" id="kpi-delay">—</div>
+      <div class="kpi-delta" id="kpi-delay-d">minutes</div>
+    </div>
+    <div class="kpi-card" style="--accent-color:#ef4444">
+      <div class="kpi-label">Cascade Events</div>
+      <div class="kpi-value" id="kpi-cascades">—</div>
+      <div class="kpi-delta" id="kpi-cascades-d">active routes</div>
+    </div>
+    <div class="kpi-card" style="--accent-color:#a855f7">
+      <div class="kpi-label">Events / min</div>
+      <div class="kpi-value" id="kpi-throughput">—</div>
+      <div class="kpi-delta">Kafka ingestion rate</div>
+    </div>
+  </div>
+
+  <!-- Row 2: Delay timeline + Cascade alerts -->
+  <div class="grid-3">
+
+    <!-- Delay timeline chart -->
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Delay Distribution — Last 30 Minutes</div>
+          <div class="panel-sub">Spark Structured Streaming · 1-min windows</div>
+        </div>
+        <div class="controls">
+          <button class="ctrl-btn active" onclick="setView('delay','15m',this)">15m</button>
+          <button class="ctrl-btn" onclick="setView('delay','30m',this)">30m</button>
+          <button class="ctrl-btn" onclick="setView('delay','1h',this)">1h</button>
+        </div>
+      </div>
+      <div class="chart-wrap">
+        <canvas id="delayChart" role="img" aria-label="Real-time delay distribution chart">Real-time transit delay distribution by minute</canvas>
+      </div>
+    </div>
+
+    <!-- Cascade alerts -->
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Active Cascade Alerts</div>
+          <div class="panel-sub">≥35% of route trips delayed</div>
+        </div>
+      </div>
+      <div class="cascade-list" id="cascade-list">
+        <div style="color:var(--muted);font-size:12px;text-align:center;padding:20px">Loading...</div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Row 3: Route table + Reliability scores -->
+  <div class="grid-2">
+
+    <!-- Route delay table -->
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">Route Status</div>
+          <div class="panel-sub">dbt mart_route_reliability · refreshed every 30s</div>
+        </div>
+        <div class="refresh-indicator">
+          <div class="refresh-ring" id="refresh-ring"></div>
+          <span class="timestamp" id="last-refresh">—</span>
+        </div>
+      </div>
+      <table class="route-table">
+        <thead>
+          <tr>
+            <th>Route</th>
+            <th>On-Time %</th>
+            <th>Avg Delay</th>
+            <th>Severity</th>
+            <th>Trend (15m)</th>
+          </tr>
+        </thead>
+        <tbody id="route-tbody"></tbody>
+      </table>
+    </div>
+
+    <!-- Reliability scores -->
+    <div class="panel">
+      <div class="panel-header">
+        <div>
+          <div class="panel-title">7-Day Reliability Score</div>
+          <div class="panel-sub">0–100 composite · rolling window</div>
+        </div>
+      </div>
+      <div class="reliability-grid" id="rel-grid"></div>
+    </div>
+
+  </div>
+
+  <!-- Row 4: Throughput chart -->
+  <div class="panel">
+    <div class="panel-header">
+      <div>
+        <div class="panel-title">Kafka Ingestion Throughput</div>
+        <div class="panel-sub">Vehicle positions + trip updates · events/sec</div>
+      </div>
+    </div>
+    <div class="chart-wrap" style="height:120px">
+      <canvas id="throughputChart" role="img" aria-label="Kafka throughput chart">Kafka event ingestion rate over time</canvas>
+    </div>
+  </div>
+
+</div>
+
+<div class="footer">
+  <span>Transit Delay Intelligence Platform · GTFS-RT → Kafka → Spark → Delta Lake → dbt</span>
+  <span id="event-count">0 events processed</span>
+</div>
+
+<script>
+// ── State ────────────────────────────────────────────────────────────────────
+const ROUTES = [
+  { id:'RED',    color:'#dc2626', name:'Red Line'    },
+  { id:'BLUE',   color:'#2563eb', name:'Blue Line'   },
+  { id:'GREEN',  color:'#16a34a', name:'Green Line'  },
+  { id:'ORANGE', color:'#ea580c', name:'Orange Line' },
+  { id:'SILVER', color:'#94a3b8', name:'Silver Line' },
+  { id:'YELLOW', color:'#ca8a04', name:'Yellow Line' },
+];
+
+let state = {
+  vehicles:    95,
+  onTimeRate:  82,
+  avgDelay:    2.4,
+  cascades:    1,
+  throughput:  1420,
+  totalEvents: 0,
+  routeData:   {},
+  delayHistory:[],
+  tpHistory:   [],
+};
+
+// Init route state
+ROUTES.forEach(r => {
+  state.routeData[r.id] = {
+    onTime:   75 + Math.random()*20,
+    delay:    1 + Math.random()*4,
+    severity: 'MINOR',
+    trend:    Array.from({length:10}, () => Math.random()),
+    cascade:  false,
+    cascadeScore: 0,
+    reliability: 60 + Math.random()*35,
+  };
+});
+
+// Force one cascade
+state.routeData['ORANGE'].cascade      = true;
+state.routeData['ORANGE'].cascadeScore = 72;
+state.routeData['ORANGE'].severity     = 'SEVERE';
+state.routeData['ORANGE'].delay        = 8.4;
+state.routeData['ORANGE'].onTime       = 41;
+
+// ── Clock ────────────────────────────────────────────────────────────────────
+function tick() {
+  const now = new Date();
+  document.getElementById('clock').textContent =
+    now.toLocaleTimeString('en-US', {hour:'2-digit',minute:'2-digit',second:'2-digit'});
+}
+setInterval(tick, 1000); tick();
+
+// ── Chart: Delay Distribution ────────────────────────────────────────────────
+const delayCtx = document.getElementById('delayChart').getContext('2d');
+const labels30 = Array.from({length:30}, (_,i) => {
+  const d = new Date(Date.now() - (29-i)*60000);
+  return d.getMinutes()+':'+String(d.getSeconds()).padStart(2,'0');
+});
+
+const delayChart = new Chart(delayCtx, {
+  type: 'bar',
+  data: {
+    labels: labels30,
+    datasets: [
+      { label:'On-time',  data: Array.from({length:30},()=>Math.floor(40+Math.random()*20)), backgroundColor:'rgba(34,197,94,0.7)',  stack:'s' },
+      { label:'Minor',    data: Array.from({length:30},()=>Math.floor(10+Math.random()*15)), backgroundColor:'rgba(249,115,22,0.7)', stack:'s' },
+      { label:'Moderate', data: Array.from({length:30},()=>Math.floor(5+Math.random()*10)),  backgroundColor:'rgba(234,179,8,0.7)',  stack:'s' },
+      { label:'Severe',   data: Array.from({length:30},()=>Math.floor(Math.random()*8)),     backgroundColor:'rgba(239,68,68,0.7)',  stack:'s' },
+    ]
+  },
+  options: {
+    responsive:true, maintainAspectRatio:false,
+    plugins: { legend:{ display:false } },
+    scales: {
+      x: { stacked:true, ticks:{ color:'#64748b', maxTicksLimit:8, font:{size:10,family:"'JetBrains Mono'"} }, grid:{ color:'rgba(255,255,255,0.03)' } },
+      y: { stacked:true, ticks:{ color:'#64748b', font:{size:10,family:"'JetBrains Mono'"} }, grid:{ color:'rgba(255,255,255,0.05)' } },
+    }
+  }
+});
+
+// ── Chart: Throughput ────────────────────────────────────────────────────────
+const tpCtx = document.getElementById('throughputChart').getContext('2d');
+const tpData = Array.from({length:60}, () => 1200+Math.random()*600);
+
+const tpChart = new Chart(tpCtx, {
+  type: 'line',
+  data: {
+    labels: Array(60).fill(''),
+    datasets: [{
+      data: tpData,
+      borderColor: '#3b82f6',
+      backgroundColor: 'rgba(59,130,246,0.08)',
+      borderWidth: 1.5,
+      fill: true,
+      tension: 0.4,
+      pointRadius: 0,
+    }]
+  },
+  options: {
+    responsive:true, maintainAspectRatio:false,
+    plugins:{ legend:{display:false} },
+    scales:{
+      x:{ display:false },
+      y:{ ticks:{color:'#64748b',font:{size:10,family:"'JetBrains Mono'"},callback:v=>v.toFixed(0)}, grid:{color:'rgba(255,255,255,0.04)'} }
+    }
+  }
+});
+
+// ── Render helpers ────────────────────────────────────────────────────────────
+function severityClass(s) {
+  if(s==='SEVERE')   return 'sev-severe';
+  if(s==='MODERATE') return 'sev-moderate';
+  if(s==='MINOR')    return 'sev-minor';
+  return 'sev-ontime';
+}
+
+function renderRouteTable() {
+  const tbody = document.getElementById('route-tbody');
+  tbody.innerHTML = ROUTES.map(r => {
+    const d  = state.routeData[r.id];
+    const sp = d.trend.map(v => {
+      const h  = Math.max(3, Math.round(v*26));
+      const bg = v > 0.7 ? '#ef4444' : v > 0.4 ? '#eab308' : '#22c55e';
+      return `<div class="spark-bar" style="height:${h}px;background:${bg}"></div>`;
+    }).join('');
+    return `<tr>
+      <td><span class="route-badge" style="background:${r.color}">${r.id.slice(0,3)}</span></td>
+      <td style="font-family:var(--mono);font-weight:600;color:${d.onTime>80?'var(--green)':d.onTime>60?'var(--yellow)':'var(--red)'}">${d.onTime.toFixed(1)}%</td>
+      <td style="font-family:var(--mono)">${d.delay.toFixed(1)}m</td>
+      <td><span class="severity-pill ${severityClass(d.severity)}">${d.severity}</span></td>
+      <td><div class="sparkline">${sp}</div></td>
+    </tr>`;
+  }).join('');
+}
+
+function renderCascades() {
+  const el      = document.getElementById('cascade-list');
+  const active  = ROUTES.filter(r => state.routeData[r.id].cascade);
+  if(!active.length) {
+    el.innerHTML = '<div style="color:var(--green);font-size:12px;text-align:center;padding:20px">✓ No active cascades</div>';
+    return;
+  }
+  el.innerHTML = active.map(r => {
+    const d   = state.routeData[r.id];
+    const cls = d.cascadeScore > 60 ? '' : 'moderate';
+    const pct = d.cascadeScore;
+    return `<div class="cascade-item ${cls}">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <span class="cascade-route" style="color:${r.color}">${r.id} — ${r.name}</span>
+        <span style="font-family:var(--mono);font-size:11px;color:${pct>60?'var(--red)':'var(--yellow)'}">Score: ${pct}</span>
+      </div>
+      <div class="cascade-detail">
+        ${(d.delay).toFixed(1)}m avg delay · ${(100-d.onTime).toFixed(0)}% trips affected
+      </div>
+      <div class="cascade-score-bar">
+        <div class="cascade-score-fill" style="width:${pct}%;background:${pct>60?'var(--red)':'var(--yellow)'}"></div>
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function renderReliability() {
+  const el = document.getElementById('rel-grid');
+  el.innerHTML = ROUTES.map(r => {
+    const s   = state.routeData[r.id].reliability;
+    const col = s > 75 ? 'var(--green)' : s > 55 ? 'var(--yellow)' : 'var(--red)';
+    return `<div class="rel-item">
+      <div class="rel-route" style="color:${r.color}">${r.id}</div>
+      <div class="rel-score" style="color:${col}">${Math.round(s)}</div>
+      <div class="rel-bar"><div class="rel-fill" style="width:${s}%;background:${col}"></div></div>
+    </div>`;
+  }).join('');
+}
+
+function renderKPIs() {
+  const cascadeCount = ROUTES.filter(r=>state.routeData[r.id].cascade).length;
+  document.getElementById('kpi-vehicles').textContent   = state.vehicles;
+  document.getElementById('kpi-ontime').textContent     = state.onTimeRate.toFixed(1)+'%';
+  document.getElementById('kpi-delay').textContent      = state.avgDelay.toFixed(1)+'m';
+  document.getElementById('kpi-cascades').textContent   = cascadeCount;
+  document.getElementById('kpi-throughput').textContent = Math.round(state.throughput/60);
+
+  const oClass = state.onTimeRate > 80 ? 'down' : 'up';
+  document.getElementById('kpi-ontime-d').className     = `kpi-delta ${oClass}`;
+  document.getElementById('kpi-ontime-d').textContent   = oClass==='up' ? '▲ delayed' : '▼ improving';
+}
+
+// ── Simulation tick ──────────────────────────────────────────────────────────
+let eventTotal = 0;
+
+function simulateTick() {
+  const ring = document.getElementById('refresh-ring');
+  ring.classList.add('active');
+  setTimeout(()=>ring.classList.remove('active'), 600);
+
+  // Evolve each route
+  ROUTES.forEach(r => {
+    const d = state.routeData[r.id];
+    d.delay     = Math.max(0, d.delay + (Math.random()-0.48)*0.6);
+    d.onTime    = Math.max(20, Math.min(99, d.onTime + (Math.random()-0.45)*2));
+    d.trend     = [...d.trend.slice(1), Math.random()];
+    d.cascade   = d.onTime < 55 || d.delay > 7;
+    d.cascadeScore = d.cascade ? Math.min(100, Math.round((100-d.onTime)*1.5 + d.delay*3)) : 0;
+    d.severity  = d.delay > 6 ? 'SEVERE' : d.delay > 3 ? 'MODERATE' : d.delay > 1 ? 'MINOR' : 'ON_TIME';
+    d.reliability = Math.max(10, Math.min(100, d.reliability + (Math.random()-0.5)*3));
+  });
+
+  // Global KPIs
+  const avgOnTime = ROUTES.reduce((s,r)=>s+state.routeData[r.id].onTime,0)/ROUTES.length;
+  const avgDelay  = ROUTES.reduce((s,r)=>s+state.routeData[r.id].delay,0)/ROUTES.length;
+  state.onTimeRate   = avgOnTime;
+  state.avgDelay     = avgDelay;
+  state.vehicles     = 90 + Math.floor(Math.random()*15);
+  state.throughput   = 1200 + Math.random()*800;
+
+  // Events counter
+  const batch = Math.floor(state.throughput/2);
+  eventTotal += batch;
+  state.totalEvents = eventTotal;
+  document.getElementById('event-count').textContent =
+    eventTotal.toLocaleString() + ' events processed';
+
+  // Update delay chart (shift + add new point)
+  const severe   = Math.floor(Math.random()*8);
+  const moderate = Math.floor(5 + Math.random()*12);
+  const minor    = Math.floor(10 + Math.random()*15);
+  const ontime   = Math.floor(40 + Math.random()*20);
+  const newLabel = new Date().getMinutes()+':'+String(new Date().getSeconds()).padStart(2,'0');
+
+  delayChart.data.labels.shift(); delayChart.data.labels.push(newLabel);
+  delayChart.data.datasets[0].data.shift(); delayChart.data.datasets[0].data.push(ontime);
+  delayChart.data.datasets[1].data.shift(); delayChart.data.datasets[1].data.push(minor);
+  delayChart.data.datasets[2].data.shift(); delayChart.data.datasets[2].data.push(moderate);
+  delayChart.data.datasets[3].data.shift(); delayChart.data.datasets[3].data.push(severe);
+  delayChart.update('none');
+
+  // Update throughput chart
+  const tp = Math.floor(state.throughput);
+  tpChart.data.datasets[0].data.shift();
+  tpChart.data.datasets[0].data.push(tp);
+  tpChart.update('none');
+
+  document.getElementById('last-refresh').textContent =
+    'Updated ' + new Date().toLocaleTimeString();
+
+  renderKPIs();
+  renderRouteTable();
+  renderCascades();
+  renderReliability();
+}
+
+// ── View toggle ───────────────────────────────────────────────────────────────
+function setView(chart, range, btn) {
+  document.querySelectorAll('.ctrl-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+// ── Boot ──────────────────────────────────────────────────────────────────────
+renderKPIs();
+renderRouteTable();
+renderCascades();
+renderReliability();
+setInterval(simulateTick, 3000);
+</script>
+</body>
+</html>
