@@ -131,11 +131,6 @@ open dashboard/index.html
 python -m http.server 3000 --directory dashboard/
 ```
 
----
-
-
----
-
 ## Key Design Decisions
 
 **Why Delta Lake over plain Parquet?**
@@ -156,12 +151,6 @@ within a 10-minute window. Score = f(delayed_pct, trip_volume) capped at 100.
 
 ---
 
-## Google Interview Pitch
-
-> "I built a streaming platform that ingests live transit feeds from the
-> DC Metro GTFS-RT API, detects delay cascades in real time using Spark
-> Structured Streaming, persists to Delta Lake for time-travel queries,
-> orchestrates daily model retraining via Airflow, and surfaces everything
 > through a dbt-powered reliability scorecard.
 >
 > The system handles ~1,400 events/minute, detects cascade propagation
