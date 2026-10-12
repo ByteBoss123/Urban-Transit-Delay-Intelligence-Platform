@@ -1,6 +1,16 @@
 # 🚇 Urban Transit Delay Intelligence Platform
 
-**Real-time prediction of delay cascades across city transit networks**
+**Streaming design for detecting delay cascades across a transit network**
+
+> **Status: design and code, not a validated system.** The pieces below are written but have not been run together
+> end to end, and no performance figure is claimed. Specifically:
+> - Events come from a built-in simulator (`kafka/gtfs_producer.py`) unless you supply a GTFS-RT API key.
+> - Cascade *detection* is a rule (≥35% of a route's trips delayed ≥3 minutes in 10 minutes). The ML *prediction*
+>   stage is written but switched off in `spark/delay_detection.py` because no model has been trained.
+> - `dashboard/index.html` animates random numbers to show the intended layout; it is not connected to the pipeline.
+> - The Quick Start's `docker-compose` commands assume a compose file that is not in the repo yet.
+> - The "<100 ms" HBase lookup and "~1,400 events/minute" figures in earlier versions were design targets, not
+>   measurements.
 
 ---
 
@@ -53,9 +63,7 @@ transit-platform/
 ├── dbt/
 │   └── models/transit_models.sql   # stg → int → mart_route_reliability
 ├── dashboard/
-│   └── index.html              # Live interactive dashboard
-└── docs/
-    └── README.md               # This file
+│   └── index.html              # Layout demo (random data)
 ```
 
 ---
@@ -139,7 +147,7 @@ ZORDER clustering for route_id+date scan performance.
 
 **Why HBase alongside Delta Lake?**
 Delta Lake = analytical queries (seconds). HBase = real-time feature
-lookups for ML scoring (sub-100ms). Lambda architecture in one project.
+lookups for ML scoring (target: under 100 ms, not yet measured). Lambda architecture in one project.
 
 **Why GTFS-RT?**
 Global open standard — same code runs on DC Metro, NYC MTA, London TfL,
@@ -148,12 +156,3 @@ BART. One platform, every city.
 **Cascade detection logic:**
 A "cascade" fires when ≥35% of trips on a route show ≥3-min delays
 within a 10-minute window. Score = f(delayed_pct, trip_volume) capped at 100.
-
----
-
-> through a dbt-powered reliability scorecard.
->
-> The system handles ~1,400 events/minute, detects cascade propagation
-> before it affects downstream stops, and retrains the prediction model
-> nightly on a rolling 30-day window — the exact infrastructure smart
-> cities will need at scale."
