@@ -1,3 +1,4 @@
+# EXPERIMENTAL PROTOTYPE: not used by the supported local/Compose path. See README.md.
 """
 GTFS-RT Kafka Producer
 Ingests real-time transit feed from DC Metro / NYC MTA and publishes to Kafka.
@@ -272,3 +273,4 @@ if __name__ == "__main__":
     while True:
         sim.emit_tick()
         time.sleep(15)
+

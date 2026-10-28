@@ -1,3 +1,4 @@
+-- EXPERIMENTAL DESIGN SKETCH: not an executable dbt project. See README.md.
 -- ============================================================
 -- dbt models — Transit Delay Platform
 -- Layers: staging → intermediate → marts
@@ -255,3 +256,4 @@ WHERE e.event_date >= CURRENT_DATE() - 7
 GROUP BY 1,2,3,4,5
 HAVING delay_events >= 5
 ORDER BY hotspot_score DESC
+

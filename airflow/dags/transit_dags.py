@@ -1,3 +1,4 @@
+# EXPERIMENTAL PROTOTYPE: not used by the supported local/Compose path. See README.md.
 """
 Airflow DAGs — Transit Platform
 1. daily_model_retrain   — retrain cascade prediction model on last 30 days
@@ -255,3 +256,4 @@ with DAG(
     )
 
     build_profiles >> update_hbase_profiles() >> notify
+

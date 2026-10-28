@@ -1,0 +1,33 @@
+name: Validate transit pipeline
+on: [push, pull_request]
+permissions:
+  contents: read
+jobs:
+  local:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - run: python -m unittest discover -s tests -v
+  kafka:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker compose config --quiet
+      - run: docker compose up --build -d
+      - name: Verify consumed events and route output
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl -fsS http://127.0.0.1:8000/health > /tmp/health.json; then
+              python -c "import json; d=json.load(open('/tmp/health.json')); assert d['events_stored'] >= 60; assert len(d['routes']) == 3; assert any(r['is_cascade'] for r in d['routes'])" && exit 0
+            fi
+            sleep 3
+          done
+          exit 1
+      - if: always()
+        run: docker compose logs --no-color
+      - if: always()
+        run: docker compose down --volumes
