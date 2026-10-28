@@ -15,9 +15,14 @@ input, window expiry, agency/service-date separation, and the 35% threshold.
 
 ## Not established by these checks
 
-Docker is not installed in the workspace. Kafka delivery, image builds and
-Compose startup were not executed here. The GitHub Actions Kafka job is supplied
-for that check; its result must be inspected separately. No cloud deployment,
+Docker is not installed in the local workspace. The separate GitHub Actions
+[validation run](https://github.com/ByteBoss123/Urban-Transit-Delay-Intelligence-Platform/actions/runs/40737053469)
+passed on implementation commit `0655ed5c0b44518ca6bb7d38aabcb5fc1c4a7d57`.
+Both jobs passed: local tests and Kafka Compose configuration, image build,
+startup, consumed-event/API smoke verification, and teardown. The smoke check
+requires at least 60 persisted events, three routes and a flagged route.
+This validates the synthetic Kafka reference path, not the experimental layers.
+No cloud deployment,
 live agency feed, Spark/Delta/HBase execution, ML accuracy, load benchmark,
 production SLA or business-impact measurement is claimed.
 

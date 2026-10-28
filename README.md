@@ -75,9 +75,10 @@ The broker is internal to the Compose network; the dashboard binds to localhost.
 This is a single-node development setup, without TLS, authentication or HA.
 
 The broker configuration follows the [official Apache Kafka Docker guidance](https://kafka.apache.org/39/getting-started/docker/).
-Docker was unavailable in the authoring environment, so the Compose path has
-not been run there. The included CI workflow exercises it when GitHub Actions runs.
-See [VALIDATION.md](VALIDATION.md) for the actual verification boundary.
+Docker was unavailable in the local authoring environment. The Kafka Compose
+build/startup and consumed-event smoke check subsequently **passed in GitHub
+Actions** on 2026-10-28. See [VALIDATION.md](VALIDATION.md) for the linked run and
+verification boundary.
 
 ## Metric contract and reliability
 
