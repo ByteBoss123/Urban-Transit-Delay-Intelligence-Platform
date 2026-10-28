@@ -1,3 +1,4 @@
+# EXPERIMENTAL PROTOTYPE: not used by the supported local/Compose path. See README.md.
 """
 Spark Structured Streaming — Transit Delay Detection & Cascade Prediction
 Reads from Kafka, computes rolling delay aggregations, flags cascade events,
@@ -287,3 +288,4 @@ if __name__ == "__main__":
     # score_cascade_propagation(spark, trip_delay)  # enable once model is trained
 
     spark.streams.awaitAnyTermination()
+

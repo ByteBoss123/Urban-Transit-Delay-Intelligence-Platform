@@ -1,158 +1,131 @@
-# 🚇 Urban Transit Delay Intelligence Platform
+# Urban Transit Delay Intelligence Platform
 
-**Streaming design for detecting delay cascades across a transit network**
+A runnable local transit analytics demonstration: synthetic trip updates are
+validated, stored with replay protection, aggregated into route delay metrics,
+and displayed in a dashboard that polls the actual API output.
 
-> **Status: design and code, not a validated system.** The pieces below are written but have not been run together
-> end to end, and no performance figure is claimed. Specifically:
-> - Events come from a built-in simulator (`kafka/gtfs_producer.py`) unless you supply a GTFS-RT API key.
-> - Cascade *detection* is a rule (≥35% of a route's trips delayed ≥3 minutes in 10 minutes). The ML *prediction*
->   stage is written but switched off in `spark/delay_detection.py` because no model has been trained.
-> - `dashboard/index.html` animates random numbers to show the intended layout; it is not connected to the pipeline.
-> - The Quick Start's `docker-compose` commands assume a compose file that is not in the repo yet.
-> - The "<100 ms" HBase lookup and "~1,400 events/minute" figures in earlier versions were design targets, not
->   measurements.
+**Source: simulated transit data.** This project does not currently ingest a
+verified live agency feed or predict delays. The working reference path uses
+Python and SQLite. An optional Kafka Compose path is included; the earlier
+Spark/Delta, HBase, Airflow and dbt designs remain experimental.
 
----
+## Run locally (Python 3.10+, no third-party packages)
 
-## Architecture
-
-```
-GTFS-RT Feeds (DC Metro / NYC MTA)
-         ↓
-    Kafka Topics
-  gtfs.vehicle_positions
-  gtfs.trip_updates
-         ↓
-  Spark Structured Streaming
-  · Rolling delay aggregations (5/10-min windows)
-  · Cascade detection (≥35% trips delayed on route)
-  · ML scoring (cascade propagation prediction)
-         ↓
-  ┌──────────────────────┐
-  │  HBase               │  ← real-time feature lookups (<100ms)
-  │  transit:route_state │
-  └──────────────────────┘
-  ┌──────────────────────┐
-  │  Delta Lake          │  ← historical storage + time-travel
-  │  /delta/tables/      │
-  └──────────────────────┘
-         ↓
-    Airflow DAGs
-  · daily_model_retrain    (3 AM daily)
-  · data_quality_checks    (every 30 min)
-  · weekly_route_profiles  (Monday 2 AM)
-         ↓
-    dbt Transformation
-  staging → intermediate → marts
-         ↓
-    Dashboard (live cascade alerts + reliability scores)
-```
-
----
-
-## Project Structure
-
-```
-transit-platform/
-├── kafka/
-│   └── gtfs_producer.py        # GTFS-RT → Kafka producer + simulator
-├── spark/
-│   └── delay_detection.py      # Structured Streaming: delay & cascade detection
-├── airflow/
-│   └── dags/transit_dags.py    # 3 DAGs: retrain, DQ, route profiles
-├── dbt/
-│   └── models/transit_models.sql   # stg → int → mart_route_reliability
-├── dashboard/
-│   └── index.html              # Layout demo (random data)
-```
-
----
-
-## Quick Start
-
-### 1. Start infrastructure
+From the repository root:
 
 ```bash
-# Kafka + Zookeeper
-docker-compose up -d kafka zookeeper
-
-# HBase
-docker-compose up -d hbase
-
-# Delta Lake (local Spark)
-pip install delta-spark pyspark confluent-kafka gtfs-realtime-bindings requests
+python -m transit.app local
 ```
 
-### 2. Create Kafka topics
+Open **http://127.0.0.1:8000**. The producer emits 60 synthetic trip updates every
+five seconds. The RED route deliberately has half its trips delayed; BLUE and
+GREEN stay below the rule threshold. The dashboard displays database-derived
+metrics, not browser-generated values. It shows disconnected and stale states.
 
 ```bash
-kafka-topics.sh --create --topic gtfs.vehicle_positions \
-  --partitions 6 --replication-factor 1 \
-  --bootstrap-server localhost:9092
-
-kafka-topics.sh --create --topic gtfs.trip_updates \
-  --partitions 6 --replication-factor 1 \
-  --bootstrap-server localhost:9092
+python -m unittest discover -s tests -v
 ```
 
-### 3. Start the simulator
+Options: `--port 8001`, `--interval 10`, `--db data/example.db`. Stop with Ctrl+C.
+The default database is `data/transit.db` relative to the working directory.
+Restarting preserves history; exact event replays do not create additional rows.
+Use a different `--db` path for a fresh demonstration.
+
+## Data flow
+
+```mermaid
+flowchart TD
+  S[Seeded synthetic trip updates] --> T{Transport}
+  T --> L[Local Python calls]
+  T --> K[Kafka topic]
+  L --> V[Validation and SQLite persistence]
+  K --> V
+  V --> A[Trailing ten-minute aggregation]
+  A --> H[HTTP API and dashboard]
+```
+
+The default path runs simulator, persistence and HTTP server in one process.
+The Kafka path runs a producer and consumer separately, using the same event
+contract and aggregation code.
+
+## Optional Kafka + Docker Compose
+
+Requires Docker with the Compose plugin:
 
 ```bash
-# No API key needed — generates synthetic GTFS-RT events
-python kafka/gtfs_producer.py
+docker compose up --build -d
+docker compose ps
+docker compose logs --tail=100 dashboard simulator
 ```
 
-### 4. Start Spark Streaming
+Open http://127.0.0.1:8000. Kafka must become healthy and the topic initializer
+must finish before the consumer and simulator start. `/health` becomes ready
+only after fresh data arrives and the consumer thread is alive.
 
 ```bash
-spark-submit \
-  --packages io.delta:delta-core_2.12:2.4.0,org.apache.spark:spark-sql-kafka-0-10_2.12:3.4.0 \
-  spark/delay_detection.py
+curl --fail http://127.0.0.1:8000/health
+curl --fail http://127.0.0.1:8000/api/routes
+docker compose down
 ```
 
-### 5. Run dbt models
+Named volumes preserve both Kafka logs and the SQLite database. Do not reset
+one while keeping the other's consumer offsets unless you explicitly arrange
+a replay. `docker compose down --volumes` resets **both** and deletes demo data.
+The broker is internal to the Compose network; the dashboard binds to localhost.
+This is a single-node development setup, without TLS, authentication or HA.
 
-```bash
-cd dbt
-dbt deps
-dbt run --select staging
-dbt run --select intermediate
-dbt run --select marts
-dbt test
-```
+The broker configuration follows the [official Apache Kafka Docker guidance](https://kafka.apache.org/39/getting-started/docker/).
+Docker was unavailable in the local authoring environment. The Kafka Compose
+build/startup and consumed-event smoke check subsequently **passed in GitHub
+Actions** on 2026-10-28. See [VALIDATION.md](VALIDATION.md) for the linked run and
+verification boundary.
 
-### 6. Start Airflow
+## Metric contract and reliability
 
-```bash
-airflow db init
-airflow webserver -p 8080 &
-airflow scheduler &
-# Trigger a manual run
-airflow dags trigger daily_model_retrain
-```
+- Input: agency, route ID, trip ID, service date, timezone-aware timestamp,
+  and a nonempty list of stop updates with numeric arrival delays.
+- Delays must be finite and between -120 and 7,200 seconds; missing fields,
+  malformed dates and timestamps more than 60 seconds in the future are rejected.
+- Content hashes prevent exact replays. Rejected payload hashes and reasons are
+  recorded separately; rejection counts are unique rejected payloads.
+- One trip means one `(agency, route, trip_id, service_date)` in the trailing
+  ten-minute wall-clock window. Repeated updates and multiple stops do not
+  increase the trip denominator. The maximum arrival delay in that window is used.
+- A trip is delayed at **180 seconds or more**. A route is flagged at **35% or
+  more delayed trips**. This is a configurable-in-code demonstration rule, not
+  evidence of causal delay propagation or an ML forecast.
+- Out-of-order events inside the window are included. Older events remain in
+  history but leave the active read model. No event in 60 seconds means stale.
+- The Kafka consumer commits offsets only after a durable write or quarantine.
+  Delivery is at least once; hashes handle exact replays. This is not a claim of
+  transactional exactly-once processing across Kafka and SQLite.
+- No retention policy is implemented. SQLite query cost and disk use grow with
+  history; this is a bounded portfolio demonstration, not a scale benchmark.
 
-### 7. Open dashboard
+## Repository map
 
-```bash
-open dashboard/index.html
-# Or serve it:
-python -m http.server 3000 --directory dashboard/
-```
+| Path | Status |
+|---|---|
+| `transit/` | Runnable simulator, validator, storage, consumer and HTTP server |
+| `dashboard/index.html` | Connected UI; no generated browser metrics |
+| `tests/test_pipeline.py` | Replay, window, grain, threshold, rejection and HTTP tests |
+| `compose.yaml`, `Dockerfile` | Optional Kafka deployment; requires runtime verification |
+| `spark/delay_detection.py` | Experimental original Spark/Delta/HBase design |
+| `airflow/dags/transit_dags.py` | Experimental DAGs; referenced training/profile jobs are absent |
+| `dbt/models/transit_models.sql` | Design sketch containing multiple models; not a dbt project |
+| `kafka/gtfs_producer.py` | Earlier GTFS producer prototype; feed URLs/auth are unverified |
 
-## Key Design Decisions
+The experimental files are preserved for future work and are **not invoked** by
+the supported commands above. HBase integration, Spark aggregation correctness,
+separate dbt models and source definitions, trained ML artifacts, and verified
+agency-feed adapters still need implementation/integration work. Do not use the
+old prototype quick-start commands or claim those layers were validated.
 
-**Why Delta Lake over plain Parquet?**
-MERGE operations for upserts, time-travel for debugging delay spikes,
-ZORDER clustering for route_id+date scan performance.
+## Portfolio wording
 
-**Why HBase alongside Delta Lake?**
-Delta Lake = analytical queries (seconds). HBase = real-time feature
-lookups for ML scoring (target: under 100 ms, not yet measured). Lambda architecture in one project.
+“Built and locally tested a simulated transit-event pipeline with replay-safe
+persistence, ten-minute route delay aggregation, rejected-record tracking and
+an API-backed dashboard; added an optional Kafka Compose deployment.”
 
-**Why GTFS-RT?**
-Global open standard — same code runs on DC Metro, NYC MTA, London TfL,
-BART. One platform, every city.
-
-**Cascade detection logic:**
-A "cascade" fires when ≥35% of trips on a route show ≥3-min delays
-within a 10-minute window. Score = f(delayed_pct, trip_volume) capped at 100.
+No production latency, throughput, forecast accuracy or business-impact figure
+is claimed. Local tests do not prove that the Kafka/Spark cloud stack is deployed.
